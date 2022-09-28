@@ -15,7 +15,7 @@ pub struct Transaction {
     pub signature: Vec<u8>,
 }
 impl Transaction {
-    pub fn new(k: Keypair, t: PublicKey, v: f32, n: u32) -> Transaction {
+    pub fn new(k: Keypair, t: &PublicKey, v: f32, n: u32) -> Transaction {
         let bytes = k.public().encode();
         let d = TxData::new(bytes, t.encode(), v, n);
         let hash_d = d.hash();

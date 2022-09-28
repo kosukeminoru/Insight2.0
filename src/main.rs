@@ -21,7 +21,7 @@ fn main() {
     }
     //random node
     else {
-        private = identity::Keypair::generate_ed25519();
+        private = identity::Keypair::generate_secp256k1();
         peerid = PeerId::from(private.public());
     }
     //Crossbeam channel set up
