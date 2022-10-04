@@ -42,7 +42,30 @@ pub async fn into_protocol(
     sender: Sender<BackendRequest>,
     reciever: Receiver<GameRequest>,
 ) -> Result<(), Box<dyn Error>> {
+    //initialize c++ / Rust (cxx)
+    let client = ffi::new_blobstore_client();
+
+    // Upload a blob.
+    let chunks = vec![b"fearless".to_vec(), b"concurrency".to_vec()];
+    let (game_sender, backend_reciever) = unbounded::<GameSend>();
+    let mut buf = MultiBuf {
+        senda: game_sender,
+        chunks,
+        pos: 0,
+    };
+    let blobid = client.put(&mut buf);
+    println!("blobid = {}", blobid);
+
+    // Add a tag.
+    client.tag(blobid, "rust");
+
+    // Read back the tags.
+    let metadata = client.metadata(blobid);
+    println!("tags = {:?}", metadata.tags);
+
+    println!("{:?}", backend_reciever.try_recv());
     println!("{:?}", local_peer_id);
+
     //Initializing behaviors
     let mut swarm = {
         let transport = transport::build_transport(local_key.clone()).await?;
@@ -86,7 +109,7 @@ pub async fn into_protocol(
     //swarm.listen_on("/ip4/192.168.1.197/tcp/54005".parse()?)?;
     swarm = kademlia::boot(swarm);
     let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
-    cxx();
+
     loop {
         select! {
             line = stdin.select_next_some() => {
@@ -187,28 +210,4 @@ pub async fn into_protocol(
 
         }
     }
-}
-
-pub fn cxx() {
-    let client = ffi::new_blobstore_client();
-
-    // Upload a blob.
-    let chunks = vec![b"fearless".to_vec(), b"concurrency".to_vec()];
-    let (game_sender, backend_reciever) = unbounded::<GameSend>();
-    let mut buf = MultiBuf {
-        senda: game_sender,
-        chunks,
-        pos: 0,
-    };
-    let blobid = client.put(&mut buf);
-    println!("blobid = {}", blobid);
-
-    // Add a tag.
-    client.tag(blobid, "rust");
-
-    // Read back the tags.
-    let metadata = client.metadata(blobid);
-    println!("tags = {:?}", metadata.tags);
-
-    println!("{:?}", backend_reciever.try_recv());
 }
