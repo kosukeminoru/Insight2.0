@@ -10,59 +10,6 @@ use libp2p::{identity, PeerId};
 use std::{env, thread};
 use structs::{BackendRequest, GameRequest};
 
-#[cxx::bridge(namespace = "org::blobstore")]
-mod ffi {
-    #[derive(Debug)]
-    enum GameSend {
-        Block,
-        Transaction,
-    }
-    enum BackendSend {
-        Move,
-        MOOve,
-    }
-
-    // Shared structs with fields visible to both languages.
-    struct BlobMetadata {
-        size: usize,
-        tags: Vec<String>,
-    }
-
-    // Rust types and signatures exposed to C++.
-    extern "Rust" {
-
-        type MultiBuf;
-        fn send(buf: &mut MultiBuf, gs: GameSend);
-        fn next_chunk(buf: &mut MultiBuf) -> &[u8];
-    }
-
-    // C++ types and signatures exposed to Rust.
-    unsafe extern "C++" {
-        include!("insight2/include/blobstore.h");
-
-        type BlobstoreClient;
-
-        fn new_blobstore_client() -> UniquePtr<BlobstoreClient>;
-        fn put(&self, parts: &mut MultiBuf) -> u64;
-        fn tag(&self, blobid: u64, tag: &str);
-        fn metadata(&self, blobid: u64) -> BlobMetadata;
-    }
-}
-pub struct MultiBuf {
-    pub senda: Sender<GameSend>,
-    chunks: Vec<Vec<u8>>,
-    pos: usize,
-}
-
-pub fn send(buf: &mut MultiBuf, gs: GameSend) {
-    buf.senda.send(gs);
-}
-pub fn next_chunk(buf: &mut MultiBuf) -> &[u8] {
-    let next = buf.chunks.get(buf.pos);
-    buf.pos += 1;
-    next.map_or(&[], Vec::as_slice)
-}
-
 fn main() {
     let args: Vec<String> = env::args().collect();
     let query = &args[1];

@@ -3,7 +3,6 @@ use super::behaviour::Event;
 use crate::{
     blockchain::{block::Block, transactions::Transaction},
     db::db,
-    ffi::{self, GameSend},
     peers,
     protocol::{
         behaviour::MyBehaviour,
@@ -12,13 +11,12 @@ use crate::{
         transport,
     },
     structs::Accounts,
-    MultiBuf,
 };
 use async_std::io::{self};
 use bytemuck::__core::iter;
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender};
 use futures::AsyncBufReadExt;
-use futures::{executor::block_on, StreamExt};
+use futures::StreamExt;
 use libp2p::{
     futures::select,
     gossipsub::{Gossipsub, GossipsubEvent, IdentTopic as Topic},
@@ -31,7 +29,7 @@ use libp2p::{
         ProtocolSupport, RequestResponse, RequestResponseEvent, RequestResponseMessage,
     },
     swarm::SwarmEvent,
-    Multiaddr, PeerId, Swarm,
+    PeerId, Swarm,
 };
 use std::{env, error::Error};
 use structs::{BackendRequest, GameRequest};
@@ -39,34 +37,9 @@ use structs::{BackendRequest, GameRequest};
 pub async fn into_protocol(
     local_key: identity::Keypair,
     local_peer_id: PeerId,
-    sender: Sender<BackendRequest>,
-    reciever: Receiver<GameRequest>,
+    _sender: Sender<BackendRequest>,
+    _reciever: Receiver<GameRequest>,
 ) -> Result<(), Box<dyn Error>> {
-    //initialize c++ / Rust (cxx)
-    let client = ffi::new_blobstore_client();
-
-    // Upload a blob.
-    let chunks = vec![b"fearless".to_vec(), b"concurrency".to_vec()];
-    let (game_sender, backend_reciever) = unbounded::<GameSend>();
-    let mut buf = MultiBuf {
-        senda: game_sender,
-        chunks,
-        pos: 0,
-    };
-    let blobid = client.put(&mut buf);
-    println!("blobid = {}", blobid);
-
-    // Add a tag.
-    client.tag(blobid, "rust");
-
-    // Read back the tags.
-    let metadata = client.metadata(blobid);
-    println!("tags = {:?}", metadata.tags);
-
-    println!("{:?}", backend_reciever.try_recv());
-    println!("{:?}", local_peer_id);
-
-    //Initializing behaviors
     let mut swarm = {
         let transport = transport::build_transport(local_key.clone()).await?;
         let gossipsub: Gossipsub = gossipsub::create_gossip(local_key.clone());
