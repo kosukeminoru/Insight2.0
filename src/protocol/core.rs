@@ -25,7 +25,7 @@ use libp2p::{
     kad::Kademlia,
     kad::{
         record::store::MemoryStore, record::Key, GetClosestPeersOk, GetRecordError, GetRecordOk,
-        KademliaEvent, QueryResult, Quorum,
+        KademliaEvent, QueryResult,
     },
     mdns::{Mdns, MdnsConfig, MdnsEvent},
     request_response::{
@@ -44,7 +44,7 @@ pub async fn into_protocol(
     _reciever: Receiver<GameRequest>,
 ) -> Result<(), Box<dyn Error>> {
     // FriendsList
-
+    // initialization + fetch persistant data
     let mut helper: ProtocolHelper;
     match db::get_put(
         "helper".to_string(),
@@ -100,303 +100,333 @@ pub async fn into_protocol(
     }
     loop {
         select! {
-            line = stdin.select_next_some() => {
-                println!("{:?}", line);
-                match line {
-                    Result::Ok(a) => {
-                        //publish default block if press 1
-                        if a == "1".to_string() {
-                            swarm
-                                .behaviour_mut()
-                                .gossipsub
-                                .publish(
-                                    b.clone(),
-                                    db::serialize(&Block::empty()).expect("serde errir"),
-                                )
-                                .expect("pub");
-                        } else if a == "2".to_string() {
-                            let private = identity::Keypair::from_protobuf_encoding(&peers::P1KEY).expect("Decoding Error");
-                            let  peerid = PeerId::from(private.public());
-                            swarm.behaviour_mut().request.send_request(&peerid, BlockRequest("block".to_string()));
-                            let keyz = &identity::Keypair::generate_secp256k1();
-                            swarm
-                                .behaviour_mut()
-                                .gossipsub
-                                .publish(
-                                    t.clone(),
-                                    db::serialize(&Transaction::new(
-                                        local_key.clone(),
-                                        &keyz.public(),
-                                        1,
-                                        1,
-                                    ))
-                                    .expect("serde errir"),
-                                )
-                                .expect("pub");
+                    //testing purposes
+                    line = stdin.select_next_some() => {
+                        println!("{:?}", line);
+                        match line {
+                            Result::Ok(a) => {
+                                //publish default block if press 1
+                                if a == "1".to_string() {
+                                    swarm
+                                        .behaviour_mut()
+                                        .gossipsub
+                                        .publish(
+                                            b.clone(),
+                                            db::serialize(&Block::empty()).expect("serde errir"),
+                                        )
+                                        .expect("pub");
+                                } else if a == "2".to_string() {
+                                    let private = identity::Keypair::from_protobuf_encoding(&peers::P1KEY).expect("Decoding Error");
+                                    let  peerid = PeerId::from(private.public());
+                                    swarm.behaviour_mut().request.send_request(&peerid, BlockRequest("block".to_string()));
+                                    let keyz = &identity::Keypair::generate_secp256k1();
+                                    swarm
+                                        .behaviour_mut()
+                                        .gossipsub
+                                        .publish(
+                                            t.clone(),
+                                            db::serialize(&Transaction::new(
+                                                local_key.clone(),
+                                                &keyz.public(),
+                                                1,
+                                                1,
+                                            ))
+                                            .expect("serde errir"),
+                                        )
+                                        .expect("pub");
+                                }
+                            }
+                            _ => println!("empy"),
                         }
-                    }
-                    _ => println!("empy"),
-                }
-            },
-            event = swarm.select_next_some() => match event {
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening in {:?}", address);
-                },
-
-                SwarmEvent::Behaviour(Event::Mdns(MdnsEvent::Discovered(list))) => {
-                    for (peer_id, multiaddr) in list {
-                        println!("identify event: {:?}", peer_id);
-                        swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
-                    }
-
-                }
-                SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Received {peer_id, info: IdentifyInfo {listen_addrs,..}})) => {
-                    println!("{:?}", peer_id);
-                    for addr in listen_addrs {
-                        swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
-                    }
-                    swarm.behaviour_mut().request.send_request(&peer_id, BlockRequest("block".to_string()));
-                },
-
-                SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::OutboundQueryCompleted{id: _, result, stats: _})) => {
-                    match result {
-                        QueryResult::GetClosestPeers(Ok(GetClosestPeersOk{key: _, peers: _})) => {
+                    },
+                    //Here are protocol events
+                    event = swarm.select_next_some() => match event {
+                        SwarmEvent::NewListenAddr { address, .. } => {
+                            println!("Listening in {:?}", address);
                         },
-                        QueryResult::GetRecord(Ok(GetRecordOk{records, cache_candidates: _})) => {
-                            let mut block: Block= Block::empty();
-                            let mut check: bool = false;
-                            for record in records {
-                                match db::deserialize::<Block>(&record.record.value){
-                                    Ok(r) => {
-                                        if Key::new(&r.hash()) == record.record.key{
-                                            block = r;
-                                            check = true;
-                                            break;
-                                        }
-                                    },
-                                    Err(_) => {
-                                        continue;
-                                    }
-                                }
-                            }
-                            if check {
-                                let mut remove: Vec<u8> = Vec::new();
-                                let mut ind = 0;
-                                for chain in &mut helper.pontential_chains{
-                                    let index: usize = chain.current_i;
-                                    if chain.block_help.chain.get(index).unwrap() == &block.hash() {
-                                        if block.validate(&chain.account).0 {
-                                            chain.current_i = chain.current_i + 1;
-                                            chain.account.valid_block(&block);
-                                            chain.block_help.work_increment(1);
-                                            if chain.current_i == chain.block_help.chain.len() -1 {
-                                                if chain.block_help.work > helper.block_helper.work {
-                                                    helper.accounts = chain.account.clone();
-                                                    helper.block_helper = chain.block_help.clone();
-                                                    helper.node_status = NodeStatus::Confirmed;
-                                                }
-                                                else{
-                                                    remove.push(ind);
-                                                }
-                                            }
-                                            else {
-                                                swarm.behaviour_mut().kademlia.get_record(Key::new(chain.block_help.chain.get(chain.current_i).unwrap()), libp2p::kad::Quorum::One);
-                                            }
-                                        }
-                                        else {
-                                            remove.push(ind);
-                                        }
-                                    }
-                                    ind += 1;
-                                }
-                                let mut subtractor = 0;
-                                for mut i in remove{
-                                    i = i - subtractor;
-                                    helper.pontential_chains.remove(i.into());
-                                    subtractor += 1;
-                                }
+
+                        SwarmEvent::Behaviour(Event::Mdns(MdnsEvent::Discovered(list))) => {
+                            for (peer_id, multiaddr) in list {
+                                println!("identify event: {:?}", peer_id);
+                                swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
                             }
 
+                        }
+                        //discover new, add and query their block helper
+                        SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Received {peer_id, info: IdentifyInfo {listen_addrs,..}})) => {
+                            println!("{:?}", peer_id);
+                            for addr in listen_addrs {
+                                swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                            }
+                            swarm.behaviour_mut().request.send_request(&peer_id, BlockRequest("block".to_string()));
                         },
-                        QueryResult::GetRecord(Err(error)) => {
-                            match error {
-                                GetRecordError::NotFound{ key, closest_peers: _} => {
-                                let bs: String = deserialize::<String>(&key.to_vec()).unwrap();
-                                let private = identity::Keypair::from_protobuf_encoding(&peers::P1KEY).expect("Decoding Error");
-                                let peerid = PeerId::from(private.public());
-                                swarm.behaviour_mut().request.send_request(&peerid, BlockRequest(bs));
+        // If kademlia record gotten
+                        SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::OutboundQueryCompleted{id: _, result, stats: _})) => {
+                            match result {
+                                QueryResult::GetClosestPeers(Ok(GetClosestPeersOk{key: _, peers: _})) => {
                                 },
-                                GetRecordError::Timeout{key, records, quorum: _} => {
-                                    if records.is_empty() {
-                                        swarm.behaviour_mut().kademlia.get_record(key, libp2p::kad::Quorum::One);
-                                    }
-                                    else{
-                                        let mut block: Block= Block::empty();
-                            let mut check: bool = false;
-                            for record in records {
-                                match db::deserialize::<Block>(&record.record.value){
-                                    Ok(r) => {
-                                        if Key::new(&r.hash()) == record.record.key{
-                                            block = r;
-                                            check = true;
-                                            break;
-                                        }
-                                    },
-                                    Err(_) => {
-                                        continue;
-                                    }
-                                }
-                            }
-                            if check {
-                                let mut remove: Vec<u8> = Vec::new();
-                                let mut ind = 0;
-                                for chain in &mut helper.pontential_chains{
-                                    let index: usize = chain.current_i;
-                                    if chain.block_help.chain.get(index).unwrap() == &block.hash() {
-                                        if block.validate(&chain.account).0 {
-                                            chain.current_i = chain.current_i + 1;
-                                            chain.account.valid_block(&block);
-                                            chain.block_help.work_increment(1);
-                                            if chain.current_i == chain.block_help.chain.len() -1 {
-                                                if chain.block_help.work > helper.block_helper.work {
-                                                    helper.accounts = chain.account.clone();
-                                                    helper.block_helper = chain.block_help.clone();
-                                                    helper.node_status = NodeStatus::Confirmed;
+                                QueryResult::GetRecord(Ok(GetRecordOk{records, cache_candidates: _})) => {
+                                    //filler
+                                    let mut block: Block= Block::empty();
+                                    let mut check: bool = false;
+                                    //for all records recieced
+                                    for record in records {
+                                        //if deseserialize into block and correct hash then break loop
+                                        match db::deserialize::<Block>(&record.record.value){
+                                            Ok(r) => {
+                                                if Key::new(&r.hash()) == record.record.key{
+                                                    block = r;
+                                                    check = true;
+                                                    break;
                                                 }
-                                                else{
+                                            },
+                                            Err(_) => {
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                    // check bool -> that valid block
+                                    if check {
+                                        // used for removing unwanted chains later
+                                        let mut remove: Vec<u8> = Vec::new();
+                                        let mut ind = 0;
+                                        // for all potential chains
+                                        for chain in &mut helper.pontential_chains{
+                                            let index: usize = chain.current_i;
+                                            //if block corresponds to current index of chain
+                                            if chain.block_help.chain.get(index).unwrap() == &block.hash() {
+                                                //adjust accounts increment index if valid block
+                                                if block.validate(&chain.account).0 {
+                                                    chain.current_i = chain.current_i + 1;
+                                                    chain.account.valid_block(&block);
+                                                    chain.block_help.work_increment(1);
+                                                    // if chain done, see if it has most work. If it does, replace current chain, or else remove
+                                                    if chain.current_i == chain.block_help.chain.len() -1 {
+                                                        if chain.block_help.work > helper.block_helper.work {
+                                                            helper.accounts = chain.account.clone();
+                                                            helper.block_helper = chain.block_help.clone();
+                                                            helper.node_status = NodeStatus::Confirmed;
+                                                        }
+                                                        else{
+                                                            remove.push(ind);
+                                                        }
+                                                    }
+                                                    // if not last block, get next one
+                                                    else {
+                                                        swarm.behaviour_mut().kademlia.get_record(Key::new(chain.block_help.chain.get(chain.current_i).unwrap()), libp2p::kad::Quorum::One);
+                                                    }
+                                                }
+                                                // (all these are cases to remove the potential chain)
+                                                else {
                                                     remove.push(ind);
                                                 }
                                             }
-                                            else {
-                                                swarm.behaviour_mut().kademlia.get_record(Key::new(chain.block_help.chain.get(chain.current_i).unwrap()), libp2p::kad::Quorum::One);
-                                            }
+                                            ind += 1;
                                         }
-                                        else {
-                                            remove.push(ind);
+                                        // remove invalid potential chains
+                                        let mut subtractor = 0;
+                                        for mut i in remove{
+                                            i = i - subtractor;
+                                            helper.pontential_chains.remove(i.into());
+                                            subtractor += 1;
                                         }
                                     }
-                                    ind += 1;
-                                }
-                                let mut subtractor = 0;
-                                for mut i in remove{
-                                    i = i - subtractor;
-                                    helper.pontential_chains.remove(i.into());
-                                    subtractor += 1;
-                                }
-                            }
 
+                                },
+
+                                QueryResult::GetRecord(Err(error)) => {
+                                    match error {
+                                     //if not found RR boot node for block,
+                                        GetRecordError::NotFound{ key, closest_peers: _} => {
+                                        let bs: String = deserialize::<String>(&key.to_vec()).unwrap();
+                                        let private = identity::Keypair::from_protobuf_encoding(&peers::P1KEY).expect("Decoding Error");
+                                        let peerid = PeerId::from(private.public());
+                                        swarm.behaviour_mut().request.send_request(&peerid, BlockRequest(bs));
+                                        },
+                                     //if timeout, and we have some records, do same thing as if it worked,
+                                        GetRecordError::Timeout{key, records, quorum: _} => {
+                                            if records.is_empty() {
+                                                swarm.behaviour_mut().kademlia.get_record(key, libp2p::kad::Quorum::One);
+                                            }
+                                            else{
+                                                let mut block: Block= Block::empty();
+                                    let mut check: bool = false;
+                                    for record in records {
+                                        match db::deserialize::<Block>(&record.record.value){
+                                            Ok(r) => {
+                                                if Key::new(&r.hash()) == record.record.key{
+                                                    block = r;
+                                                    check = true;
+                                                    break;
+                                                }
+                                            },
+                                            Err(_) => {
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                    if check {
+                                        let mut remove: Vec<u8> = Vec::new();
+                                        let mut ind = 0;
+                                        for chain in &mut helper.pontential_chains{
+                                            let index: usize = chain.current_i;
+                                            if chain.block_help.chain.get(index).unwrap() == &block.hash() {
+                                                if block.validate(&chain.account).0 {
+                                                    chain.current_i = chain.current_i + 1;
+                                                    chain.account.valid_block(&block);
+                                                    chain.block_help.work_increment(1);
+                                                    if chain.current_i == chain.block_help.chain.len() -1 {
+                                                        if chain.block_help.work > helper.block_helper.work {
+                                                            helper.accounts = chain.account.clone();
+                                                            helper.block_helper = chain.block_help.clone();
+                                                            helper.node_status = NodeStatus::Confirmed;
+                                                        }
+                                                        else{
+                                                            remove.push(ind);
+                                                        }
+                                                    }
+                                                    else {
+                                                        swarm.behaviour_mut().kademlia.get_record(Key::new(chain.block_help.chain.get(chain.current_i).unwrap()), libp2p::kad::Quorum::One);
+                                                    }
+                                                }
+                                                else {
+                                                    remove.push(ind);
+                                                }
+                                            }
+                                            ind += 1;
+                                        }
+                                        let mut subtractor = 0;
+                                        for mut i in remove{
+                                            i = i - subtractor;
+                                            helper.pontential_chains.remove(i.into());
+                                            subtractor += 1;
+                                        }
+                                    }
+
+                                            }
+                                        },
+                                        _ => (),
                                     }
                                 },
                                 _ => (),
                             }
                         },
-                        _ => (),
-                    }
-                },
-                SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::RoutablePeer{peer, address})) => {
-                     swarm.behaviour_mut().kademlia.add_address(&peer, address);
-                },
-                SwarmEvent::Behaviour(Event::GossipSub(GossipsubEvent::Message {
-                    propagation_source: peer_id,
-                    message_id: _id,
-                    message,
-                })) => {
-                    match helper.node_status{
-                         NodeStatus::Pending => {
-                            match message.topic.as_str() {
-                                "block" =>{
-                                    match db::deserialize::<Block>(&message.data){
-                                       Ok(block) => {
-                                            helper.pending_blocks.push_back(block);
-                                       },
-                                        Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
-                                    }
-                                },
+                        SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::RoutablePeer{peer, address})) => {
+                             swarm.behaviour_mut().kademlia.add_address(&peer, address);
+                        },
 
-
-                                "tx" => {
-                                    match db::deserialize::<Transaction>(&message.data){
-                                       Ok(tx) => {
-                                        match tx.verify_transaction_sig(){
-                                            true => helper.mem_pool.add_tx(tx),
-                                            false => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
-                                        }
-                                       },
-                                       Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
-                                    }
-                                },
-                                _ => {}
-                            }
-                         }
-                        _ => {
-                            match message.topic.as_str() {
-                                "block" =>{
-                                    match db::deserialize::<Block>(&message.data){
-                                       Ok(block) => {
-                                        helper.pending_blocks.push_back(block.clone());
-                                        while !helper.pending_blocks.is_empty(){
-                                            let b = helper.pending_blocks.pop_front().unwrap();
-                                            match b.validate(&helper.accounts){
-                                                (true, c) => {
-                                                    helper.mem_pool.valid_block(&b);
-                                                    helper.block_helper.add_to_chain(b.hash());
-                                                    helper.block_helper.work_increment(c);
-                                                    helper.accounts.valid_block(&b);
-                                                    db::save_helper(&helper);
-                                                },
-                                                (false, _) => (),
+                        SwarmEvent::Behaviour(Event::GossipSub(GossipsubEvent::Message {
+                            propagation_source: peer_id,
+                            message_id: _id,
+                            message,
+                        })) => {
+                            match helper.node_status{
+                                 NodeStatus::Pending => {
+                                    match message.topic.as_str() {
+                                        // if block, add to pending blocks
+                                        "block" =>{
+                                            match db::deserialize::<Block>(&message.data){
+                                               Ok(block) => {
+                                                    helper.pending_blocks.push_back(block);
+                                               },
+                                                Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
                                             }
-                                        }
-                                    },
-                                       Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                        },
+                                        // if tx, add to tx pool
+                                        "tx" => {
+                                            match db::deserialize::<Transaction>(&message.data){
+                                               Ok(tx) => {
+                                                match tx.verify_transaction_sig(){
+                                                    true => helper.mem_pool.add_tx(tx),
+                                                    false => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                                }
+                                               },
+                                               Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                            }
+                                        },
+                                        _ => {}
                                     }
-                                },
-                                "tx" => {
-                                    match db::deserialize::<Transaction>(&message.data){
-                                       Ok(tx) => {
-                                        match tx.verify_transaction_sig(){
-                                            true => helper.mem_pool.add_tx(tx),
-                                            false => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
-                                        }
-                                       },
-                                       Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                 }
+                                 //if not pending, then we will validate all blocks in block pool and drain tx mem pool
+                                _ => {
+                                    match message.topic.as_str() {
+                                        "block" =>{
+                                            match db::deserialize::<Block>(&message.data){
+                                               Ok(block) => {
+                                                helper.pending_blocks.push_back(block.clone());
+                                                while !helper.pending_blocks.is_empty(){
+                                                    let b = helper.pending_blocks.pop_front().unwrap();
+                                                    match b.validate(&helper.accounts){
+                                                        (true, c) => {
+                                                            helper.mem_pool.valid_block(&b);
+                                                            helper.block_helper.add_to_chain(b.hash());
+                                                            helper.block_helper.work_increment(c);
+                                                            helper.accounts.valid_block(&b);
+                                                            db::save_helper(&helper);
+                                                        },
+                                                        (false, _) => (),
+                                                    }
+                                                }
+                                            },
+                                               Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                            }
+                                        },
+                                        "tx" => {
+                                            match db::deserialize::<Transaction>(&message.data){
+                                               Ok(tx) => {
+                                                match tx.verify_transaction_sig(){
+                                                    true => helper.mem_pool.add_tx(tx),
+                                                    false => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                                }
+                                               },
+                                               Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                            }
+                                        },
+                                        _ => println!("err topic"),
                                     }
-                                },
-                                _ => println!("err topic"),
-                            }
-                        }
+                                }
 
-                    }
-                },
-                SwarmEvent::Behaviour(Event::RequestResponse(RequestResponseEvent::Message { peer, message })) => {
-                match message {
-                //Request
-                // We can go through this. Pretty much the goal is to remember the most frequent block.
-                //It might be good the create your own algorithm for this. Keep in mind it is a bit funky.
-                RequestResponseMessage::Request {
-                    request_id: _,
-                    request,
-                    channel,
-                } => {
-                    let BlockRequest(s) = request;
-                    if s == "block".to_string() {
-                    swarm.behaviour_mut().request
-                        .send_response(
+                            }
+                        },
+                        SwarmEvent::Behaviour(Event::RequestResponse(RequestResponseEvent::Message { peer, message })) => {
+                        // two types of requests
+                        // if request send "block" as a string, send back accounts and chain headers
+                        // if request sends another string(should be block hash)
+                        //then check db for block and send response
+                            match message {
+                        RequestResponseMessage::Request {
+                            request_id: _,
+                            request,
                             channel,
-                            BlockResponse(ResponseEnum::Response(helper.accounts.clone(), helper.block_helper.clone())),
-                        )
-                        .expect("response error");
-                    }
-                    else {
-                        match &db::get(s.clone()){
-                            Ok(Some(block)) => {
-                                match deserialize::<Block>(block){
-                                    Ok(b) => {
-                                        swarm.behaviour_mut().request
-                                        .send_response(
-                                        channel,
-                                        BlockResponse(ResponseEnum::Block(b)))
-                                        .expect("response error");
+                        } => {
+                            let BlockRequest(s) = request;
+                            if s == "block".to_string() {
+                            swarm.behaviour_mut().request
+                                .send_response(
+                                    channel,
+                                    BlockResponse(ResponseEnum::Response(helper.accounts.clone(), helper.block_helper.clone())),
+                                )
+                                .expect("response error");
+                            }
+                            else {
+                                match &db::get(s.clone()){
+                                    Ok(Some(block)) => {
+                                        match deserialize::<Block>(block){
+                                            Ok(b) => {
+                                                swarm.behaviour_mut().request
+                                                .send_response(
+                                                channel,
+                                                BlockResponse(ResponseEnum::Block(b)))
+                                                .expect("response error");
+                                            },
+                                            _ => {
+                                                swarm.behaviour_mut().request
+                                                .send_response(
+                                                channel,
+                                                BlockResponse(ResponseEnum::NoBlock(s.clone())))
+                                                .expect("response error");
+                                            },
+                                        }
                                     },
                                     _ => {
                                         swarm.behaviour_mut().request
@@ -406,102 +436,94 @@ pub async fn into_protocol(
                                         .expect("response error");
                                     },
                                 }
-                            },
-                            _ => {
-                                swarm.behaviour_mut().request
-                                .send_response(
-                                channel,
-                                BlockResponse(ResponseEnum::NoBlock(s.clone())))
-                                .expect("response error");
-                            },
-                        }
-                    }
+                            }
 
-            },
+                    },
 
-                //response
-                RequestResponseMessage::Response {
-                    request_id: _,
-                    response,
-                } => {
-                    let BlockResponse(r) = response;
-                    match r {
-                    ResponseEnum::Response(accounts, block_help) => {
-                    match helper.node_status {
-                        NodeStatus::Confirmed => {
-                        },
-                        NodeStatus::Pending => {
-                            for p in helper.friends_list.friends() {
-                                if &peer == p {
-                                    helper.node_status = NodeStatus::PendingFriend;
-                                    sender.send(BackendRequest::Start(accounts.clone())).expect("sender error");
+                        //recieving response
+                        RequestResponseMessage::Response {
+                            request_id: _,
+                            response,
+                        } => {
+                            let BlockResponse(r) = response;
+                            match r {
+                            ResponseEnum::Response(accounts, block_help) => {
+                            match helper.node_status {
+                                NodeStatus::Confirmed => {
+                                },
+                                NodeStatus::Pending => {
+                                    for p in helper.friends_list.friends() {
+                                        if &peer == p {
+                                            helper.node_status = NodeStatus::PendingFriend;
+                                            sender.send(BackendRequest::Start(accounts.clone())).expect("sender error");
+                                        }
+                                    }
+                                },
+                                NodeStatus::PendingFriend => { },
+                            }
+                            if block_help != helper.block_helper{
+                                if block_help.work > helper.block_helper.work {
+                                    let s = block_help.chain[0].clone();
+                                    helper.pontential_chains.push(PotentialChain::new(block_help.chain));
+                                    swarm.behaviour_mut().kademlia.get_record(Key::new(&s), libp2p::kad::Quorum::One);
                                 }
                             }
-                        },
-                        NodeStatus::PendingFriend => { },
-                    }
-                    if block_help != helper.block_helper{
-                        if block_help.work > helper.block_helper.work {
-                            let s = block_help.chain[0].clone();
-                            helper.pontential_chains.push(PotentialChain::new(block_help.chain));
-                            swarm.behaviour_mut().kademlia.get_record(Key::new(&s), libp2p::kad::Quorum::One);
                         }
-                    }
-                }
-                ResponseEnum::Block(b) => {
-                    let mut remove: Vec<u8> = Vec::new();
-                    let mut ind = 0;
-                    for chain in &mut helper.pontential_chains{
-                        let index: usize = chain.current_i;
-                        if chain.block_help.chain.get(index).unwrap() == &b.hash() {
-                        if b.validate(&chain.account).0 {
-                            chain.current_i = chain.current_i + 1;
-                            chain.account.valid_block(&b);
-                            chain.block_help.work_increment(1);
-                            if chain.current_i == chain.block_help.chain.len() -1 {
-                                if chain.block_help.work > helper.block_helper.work {
-                                    helper.accounts = chain.account.clone();
-                                    helper.block_helper = chain.block_help.clone();
-                                    helper.node_status = NodeStatus::Confirmed;
+                        // same thing as kademlia behaviour
+                        ResponseEnum::Block(b) => {
+                            let mut remove: Vec<u8> = Vec::new();
+                            let mut ind = 0;
+                            for chain in &mut helper.pontential_chains{
+                                let index: usize = chain.current_i;
+                                if chain.block_help.chain.get(index).unwrap() == &b.hash() {
+                                if b.validate(&chain.account).0 {
+                                    chain.current_i = chain.current_i + 1;
+                                    chain.account.valid_block(&b);
+                                    chain.block_help.work_increment(1);
+                                    if chain.current_i == chain.block_help.chain.len() -1 {
+                                        if chain.block_help.work > helper.block_helper.work {
+                                            helper.accounts = chain.account.clone();
+                                            helper.block_helper = chain.block_help.clone();
+                                            helper.node_status = NodeStatus::Confirmed;
+                                        }
+                                        else{
+                                            remove.push(ind);
+                                        }
+                                    }
+                                    else {
+                                        swarm.behaviour_mut().kademlia.get_record(Key::new(chain.block_help.chain.get(chain.current_i).unwrap()), libp2p::kad::Quorum::One);
+                                    }
                                 }
-                                else{
+                                else {
                                     remove.push(ind);
                                 }
+                                }
+                                ind += 1;
                             }
-                            else {
-                                swarm.behaviour_mut().kademlia.get_record(Key::new(chain.block_help.chain.get(chain.current_i).unwrap()), libp2p::kad::Quorum::One);
+                            let mut subtractor = 0;
+                            for mut i in remove{
+                                i = i - subtractor;
+                                helper.pontential_chains.remove(i.into());
+                                subtractor += 1;
                             }
                         }
-                        else {
-                            remove.push(ind);
+                        ResponseEnum::NoBlock(s) => {
+                            let mut ind = 0;
+                            for chain in &mut helper.pontential_chains{
+                                let index: usize = chain.current_i;
+                                if chain.block_help.chain.get(index).unwrap() == &s {
+                                    helper.pontential_chains.remove(ind);
+                                    break;
+                                }
+                                ind = ind + 1;
+                            }
                         }
+                        }}
                         }
-                        ind += 1;
+                    },
+                        _ => (),
                     }
-                    let mut subtractor = 0;
-                    for mut i in remove{
-                        i = i - subtractor;
-                        helper.pontential_chains.remove(i.into());
-                        subtractor += 1;
-                    }
-                }
-                ResponseEnum::NoBlock(s) => {
-                    let mut ind = 0;
-                    for chain in &mut helper.pontential_chains{
-                        let index: usize = chain.current_i;
-                        if chain.block_help.chain.get(index).unwrap() == &s {
-                            helper.pontential_chains.remove(ind);
-                            break;
-                        }
-                        ind = ind + 1;
-                    }
-                }
-                }}
-                }
-            },
-                _ => (),
-            }
 
-        }
+                }
     }
 }

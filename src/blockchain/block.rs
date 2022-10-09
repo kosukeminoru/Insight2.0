@@ -40,7 +40,7 @@ impl Block {
             world: w,
         }
     }
-    pub fn validate(&self, v: &ValueList) -> (bool, usize) {
+    pub fn validate(&self, _: &ValueList) -> (bool, usize) {
         (true, 1)
     }
     pub fn validate_work(&self) -> (bool, u128) {
