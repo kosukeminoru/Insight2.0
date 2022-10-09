@@ -17,7 +17,7 @@ pub struct BlockCodec();
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockRequest();
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BlockResponse(pub structs::Accounts, pub blockchain::block::Block);
+pub struct BlockResponse(pub structs::ValueList, pub structs::BlockHelper);
 
 impl ProtocolName for RequestProtocol {
     fn protocol_name(&self) -> &[u8] {
@@ -83,14 +83,14 @@ impl RequestResponseCodec for BlockCodec {
         &mut self,
         _: &RequestProtocol,
         io: &mut T,
-        BlockResponse(accounts, block): BlockResponse,
+        BlockResponse(accounts, block_help): BlockResponse,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
     {
         write_length_prefixed(
             io,
-            db::serialize(&BlockResponse(accounts, block))
+            db::serialize(&BlockResponse(accounts, block_help))
                 .expect("Serialize Error")
                 .into_bytes(),
         )

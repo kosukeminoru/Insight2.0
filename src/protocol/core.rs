@@ -10,7 +10,7 @@ use crate::{
         rr::{self, BlockRequest, BlockResponse},
         transport,
     },
-    structs::Accounts,
+    structs::{NodeStatus, ProtocolHelper},
 };
 use async_std::io::{self};
 use bytemuck::__core::iter;
@@ -22,8 +22,8 @@ use libp2p::{
     gossipsub::{Gossipsub, GossipsubEvent, IdentTopic as Topic},
     identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo},
     identity,
-    kad::record::store::MemoryStore,
     kad::Kademlia,
+    kad::{record::store::MemoryStore, GetClosestPeersOk, KademliaEvent, QueryResult},
     mdns::{Mdns, MdnsConfig, MdnsEvent},
     request_response::{
         ProtocolSupport, RequestResponse, RequestResponseEvent, RequestResponseMessage,
@@ -40,6 +40,16 @@ pub async fn into_protocol(
     _sender: Sender<BackendRequest>,
     _reciever: Receiver<GameRequest>,
 ) -> Result<(), Box<dyn Error>> {
+    // FriendsList
+
+    let mut helper: ProtocolHelper;
+    match db::get_put(
+        "helper".to_string(),
+        db::serialize(&ProtocolHelper::default()).expect("serdeError"),
+    ) {
+        Some(vector) => helper = db::deserialize(&vector).unwrap(),
+        None => helper = ProtocolHelper::default(),
+    }
     let mut swarm = {
         let transport = transport::build_transport(local_key.clone()).await?;
         let gossipsub: Gossipsub = gossipsub::create_gossip(local_key.clone());
@@ -82,13 +92,16 @@ pub async fn into_protocol(
     //swarm.listen_on("/ip4/192.168.1.197/tcp/54005".parse()?)?;
     swarm = kademlia::boot(swarm);
     let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
-
+    for friend in helper.friends_list.friends() {
+        swarm.behaviour_mut().kademlia.get_closest_peers(*friend);
+    }
     loop {
         select! {
             line = stdin.select_next_some() => {
                 println!("{:?}", line);
                 match line {
                     Result::Ok(a) => {
+                        //publish default block if press 1
                         if a == "1".to_string() {
                             swarm
                                 .behaviour_mut()
@@ -111,7 +124,7 @@ pub async fn into_protocol(
                                     db::serialize(&Transaction::new(
                                         local_key.clone(),
                                         &keyz.public(),
-                                        1.0,
+                                        1,
                                         1,
                                     ))
                                     .expect("serde errir"),
@@ -139,18 +152,86 @@ pub async fn into_protocol(
                     for addr in listen_addrs {
                         swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                     }
+                    swarm.behaviour_mut().request.send_request(&peer_id, BlockRequest());
+                },
+
+                SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::OutboundQueryCompleted{id: _, result, stats: _})) => {
+                    match result {
+                        QueryResult::GetClosestPeers(Ok(GetClosestPeersOk{key: _, peers: _})) => {
+                        },
+                        _ => (),
+                    }
+                },
+                SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::RoutablePeer{peer, address})) => {
+                     swarm.behaviour_mut().kademlia.add_address(&peer, address);
                 },
                 SwarmEvent::Behaviour(Event::GossipSub(GossipsubEvent::Message {
-                    propagation_source: _peer_id,
+                    propagation_source: peer_id,
                     message_id: _id,
                     message,
                 })) => {
-                    match message.topic.as_str() {
-                    "block" => println!("{:?}", db::deserialize::<Block>(&message.data)),
-                    "tx" => println!("{:?}", db::deserialize::<Transaction>(&message.data)),
-                    _ => println!("err topic"),
-                    }
+                    match helper.node_status{
+                         NodeStatus::Pending => {
+                            match message.topic.as_str() {
+                                "block" =>{
+                                    match db::deserialize::<Block>(&message.data){
+                                       Ok(block) => {
+                                            helper.pending_blocks.push(block);
+                                       },
+                                        Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                    }
+                                },
 
+                            }
+                             "tx" => {
+                                    match db::deserialize::<Transaction>(&message.data){
+                                       Ok(tx) => {
+                                        match tx.verify_transaction_sig(){
+                                            true => helper.mem_pool.add_tx(tx),
+                                            false => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                        }
+                                       },
+                                       Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                    }
+                                },
+                         }
+                        _ => {
+                            match message.topic.as_str() {
+                                "block" =>{
+                                    match db::deserialize::<Block>(&message.data){
+                                       Ok(block) => {
+                                        helper.pending_blocks.push(block);
+                                        while !helper.pending_blocks.is_empty(){
+                                            let b = helper.pending_blocks.pop_front();
+                                            match b.validate(){
+                                                (true, c) => {
+                                                    helper.mem_pool.valid_block(block.clone());
+                                                    helper.block_helper.add_to_chain(block.hash());
+                                                    helper.block_helper.work_increment(c);
+                                                    helper.accounts.valid_block(block);
+                                                },
+                                                (false, _) => (),
+                                            }
+                                        }
+                                    },
+                                       Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                    }
+                                },
+                                "tx" => {
+                                    match db::deserialize::<Transaction>(&message.data){
+                                       Ok(tx) => {
+                                        match tx.verify_transaction_sig(){
+                                            true => helper.mem_pool.add_tx(tx),
+                                            false => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                        }
+                                       },
+                                       Err(_) => swarm.behaviour_mut().gossipsub.blacklist_peer(&peer_id)
+                                    }
+                                },
+                                _ => println!("err topic"),
+                            }
+                        }
+                       
                 }
                 SwarmEvent::Behaviour(Event::RequestResponse(RequestResponseEvent::Message { peer: _, message })) => match message {
                 //Request
@@ -164,7 +245,7 @@ pub async fn into_protocol(
                     swarm.behaviour_mut().request
                         .send_response(
                             channel,
-                            BlockResponse(Accounts::new(), Block::default()),
+                            BlockResponse(helper.accounts.clone(), helper.block_helper.clone()),
                         )
                         .expect("response error");
                 }
@@ -173,14 +254,23 @@ pub async fn into_protocol(
                     request_id: _,
                     response,
                 } => {
-                    let BlockResponse(accounts, block) = response;
-                    println!("{:?}", accounts);
-                    println!("{:?}", block);
+                    let BlockResponse(accounts, block_help) = response;
+                    match helper.node_status {
+                        NodeStatus::Confirmed => {
+                            if block_help != helper.block_helper{
+                                if block_help.work > helper.block_helper.work {
+
+                                }
+                            }
+                        },
+                        NodeStatus::Pending => {
+
+                        },
+                    }
                 }
             },
                 _ => (),
             }
-
         }
     }
 }

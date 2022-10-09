@@ -3,8 +3,7 @@ pub mod db;
 pub mod peers;
 pub mod protocol;
 pub mod structs;
-use crossbeam_channel::{unbounded, Sender};
-use ffi::GameSend;
+use crossbeam_channel::unbounded;
 use futures::executor::block_on;
 use libp2p::{identity, PeerId};
 use std::{env, thread};
@@ -32,4 +31,5 @@ fn main() {
         protocol::core::into_protocol(private, peerid, backend_sender, backend_reciever);
     thread::spawn(move || block_on(my_future).expect("Thread Spawn Error"));
     loop {}
+    //Clean up
 }

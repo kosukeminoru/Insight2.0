@@ -2,19 +2,18 @@ use libp2p::core::identity::Keypair;
 use libp2p::core::identity::PublicKey;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
 use sha2::Digest;
 use sha2::Sha256;
 
 use crate::structs::ValueList;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Transaction {
     pub data: TxData,
     pub signature: Vec<u8>,
 }
 impl Transaction {
-    pub fn new(k: Keypair, t: &PublicKey, v: f32, n: u32) -> Transaction {
+    pub fn new(k: Keypair, t: &PublicKey, v: u32, n: u32) -> Transaction {
         let bytes = k.public().to_protobuf_encoding();
         let d = TxData::new(bytes, t.to_protobuf_encoding(), v, n);
         let hash_d = d.hash();
@@ -48,15 +47,15 @@ impl Transaction {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct TxData {
     pub sender: Vec<u8>,
     pub recepient: Vec<u8>,
-    pub value: f32,
+    pub value: u32,
     pub nonce: u32,
 }
 impl TxData {
-    pub fn new(from: Vec<u8>, to: Vec<u8>, val: f32, once: u32) -> TxData {
+    pub fn new(from: Vec<u8>, to: Vec<u8>, val: u32, once: u32) -> TxData {
         TxData {
             sender: from,
             recepient: to,

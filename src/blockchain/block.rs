@@ -4,15 +4,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::SystemTime;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct HashString(String);
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Blockchain {
-    pub chain: Vec<Block>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Block {
     /// Reference to the previous block in the chain.
     pub prev_blockhash: String,
@@ -40,13 +32,13 @@ impl Block {
             world: w,
         }
     }
-    pub fn validate(&self) -> bool {
-        true
+    pub fn validate(&self) -> (bool, u128) {
+        (true, 1)
     }
-    pub fn validate_work(&self) -> bool {
-        true
+    pub fn validate_work(&self) -> (bool, u128) {
+        (true, 1)
     }
-    pub fn validate_tx(&self, v: &ValueList) -> bool {
+    pub fn validate_txs(&self, v: &ValueList) -> bool {
         for t in &self.tx {
             if !(t.verify_transaction_sig() && t.verify_value(v)) {
                 return false;
@@ -55,7 +47,7 @@ impl Block {
         true
     }
     pub fn validate_new(&self, value: &ValueList) -> bool {
-        if self.validate_work() && self.validate_tx(value) {
+        if self.validate_work().0 && self.validate_txs(value) {
             return true;
         }
         false
