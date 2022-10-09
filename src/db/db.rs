@@ -1,7 +1,7 @@
 use rocksdb::{Options, DB};
 use serde::Serialize;
 
-use crate::structs::InsightError;
+use crate::structs::{InsightError, ProtocolHelper};
 
 //Input value into the database with given key
 //Key and Value should be serialized
@@ -71,4 +71,7 @@ pub fn get_put(key: String, value: String) -> Option<Vec<u8>> {
         db.put(key, value).expect("put failed");
         None
     }
+}
+pub fn save_helper(h: &ProtocolHelper) {
+    put("helper".to_string(), serialize(h).unwrap()).expect("DB ERROR");
 }

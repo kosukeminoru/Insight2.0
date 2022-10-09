@@ -1,6 +1,5 @@
-use crate::blockchain;
-use crate::db::db;
 use crate::structs;
+use crate::{blockchain::block::Block, db::db};
 use async_std::io;
 use async_trait::async_trait;
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
@@ -15,9 +14,16 @@ pub struct RequestProtocol();
 #[derive(Clone)]
 pub struct BlockCodec();
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlockRequest();
+pub struct BlockRequest(pub String);
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BlockResponse(pub structs::ValueList, pub structs::BlockHelper);
+pub struct BlockResponse(pub ResponseEnum);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ResponseEnum {
+    NoBlock(String),
+    Block(Block),
+    Response(structs::ValueList, structs::BlockHelper),
+}
 
 impl ProtocolName for RequestProtocol {
     fn protocol_name(&self) -> &[u8] {
@@ -44,7 +50,16 @@ impl RequestResponseCodec for BlockCodec {
         if vec.is_empty() {
             return Err(io::ErrorKind::UnexpectedEof.into());
         }
-        Ok(BlockRequest())
+        match db::deserialize::<String>(&vec) {
+            Ok(value) => {
+                if value == "block".to_string() {
+                    Ok(BlockRequest("block".to_string()))
+                } else {
+                    Ok(BlockRequest(value))
+                }
+            }
+            _ => Ok(BlockRequest("block".to_string())),
+        }
     }
 
     async fn read_response<T>(
@@ -68,14 +83,17 @@ impl RequestResponseCodec for BlockCodec {
         &mut self,
         _: &RequestProtocol,
         io: &mut T,
-        BlockRequest(): BlockRequest,
+        BlockRequest(s): BlockRequest,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
     {
-        write_length_prefixed(io, "hash".to_string()).await?;
+        if s == "block".to_string() {
+            write_length_prefixed(io, "block".to_string()).await?;
+        } else {
+            write_length_prefixed(io, s).await?;
+        }
         io.close().await?;
-
         Ok(())
     }
 
@@ -83,14 +101,14 @@ impl RequestResponseCodec for BlockCodec {
         &mut self,
         _: &RequestProtocol,
         io: &mut T,
-        BlockResponse(accounts, block_help): BlockResponse,
+        BlockResponse(e): BlockResponse,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
     {
         write_length_prefixed(
             io,
-            db::serialize(&BlockResponse(accounts, block_help))
+            db::serialize(&BlockResponse(e))
                 .expect("Serialize Error")
                 .into_bytes(),
         )

@@ -16,6 +16,7 @@ pub struct ProtocolHelper {
     pub node_status: NodeStatus,
     pub mem_pool: MemPool,
     pub pending_blocks: VecDeque<Block>,
+    pub pontential_chains: Vec<PotentialChain>,
 }
 impl ProtocolHelper {
     pub fn default() -> ProtocolHelper {
@@ -26,6 +27,7 @@ impl ProtocolHelper {
             node_status: NodeStatus::Pending,
             mem_pool: MemPool::default(),
             pending_blocks: VecDeque::new(),
+            pontential_chains: Vec::new(),
         }
     }
 }
@@ -57,7 +59,7 @@ impl MemPool {
         self.pool.push(tx);
     }
     // removes all txs from block from mempool
-    pub fn valid_block(&mut self, block: Block) {
+    pub fn valid_block(&mut self, block: &Block) {
         for tx in &block.tx {
             match self.contain(tx) {
                 (true, int) => {
@@ -68,20 +70,27 @@ impl MemPool {
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
-pub struct PotentialChains {
-    pub helper: BlockHelper,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PotentialChain {
+    pub current_i: usize,
+    pub status: bool,
+    pub block_help: BlockHelper,
+    pub account: ValueList,
 }
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
-pub struct QueryHelper {
-    pub union: Vec<String>,
+impl PotentialChain {
+    pub fn new(h: Vec<String>) -> PotentialChain {
+        PotentialChain {
+            current_i: 0,
+            status: false,
+            block_help: BlockHelper { chain: h, work: 0 },
+            account: ValueList::default(),
+        }
+    }
 }
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct BlockHelper {
     pub chain: Vec<String>,
-    pub work: u128,
+    pub work: usize,
 }
 impl BlockHelper {
     pub fn default() -> BlockHelper {
@@ -95,7 +104,7 @@ impl BlockHelper {
         self.chain.push(hash);
     }
     // changes last block of block helper
-    pub fn work_increment(&mut self, work: u128) {
+    pub fn work_increment(&mut self, work: usize) {
         self.work += work;
     }
 }
@@ -135,6 +144,7 @@ pub enum GameRequest {
     CreateBlock(),
 }
 pub enum BackendRequest {
+    Start(ValueList),
     AddFriend(PeerId),
     RemoveFriend(PeerId),
     SendTransaction(PublicKey, u32),
@@ -172,8 +182,8 @@ impl ValueList {
         x.nonce_inc();
         self.list.insert(peer, x);
     }
-    pub fn valid_block(&mut self, block: Block) {
-        for tx in block.tx {
+    pub fn valid_block(&mut self, block: &Block) {
+        for tx in &block.tx {
             let peer_s: PeerId = PeerId::from_public_key(
                 &PublicKey::from_protobuf_encoding(&tx.data.sender).unwrap(),
             );

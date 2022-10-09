@@ -16,7 +16,15 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn default() -> Block {
+    pub fn genesis_block() -> Block {
+        Block {
+            prev_blockhash: "000000000000000".to_string(),
+            tx: Vec::<Transaction>::with_capacity(100),
+            world: "".to_string(),
+            time: SystemTime::now(),
+        }
+    }
+    pub fn empty() -> Block {
         Block {
             prev_blockhash: "000000000000000".to_string(),
             tx: Vec::<Transaction>::with_capacity(100),
@@ -32,7 +40,7 @@ impl Block {
             world: w,
         }
     }
-    pub fn validate(&self) -> (bool, u128) {
+    pub fn validate(&self, v: &ValueList) -> (bool, usize) {
         (true, 1)
     }
     pub fn validate_work(&self) -> (bool, u128) {
