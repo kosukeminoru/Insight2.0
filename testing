@@ -1,1 +1,5 @@
+Test all protocols with multiple blocks
+Connect game side with backend 
+
+- Re-visit consensus
 Peer and addrs are discovered by quering PeerID in Kad

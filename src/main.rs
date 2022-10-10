@@ -1,5 +1,6 @@
 pub mod blockchain;
 pub mod db;
+pub mod game;
 pub mod peers;
 pub mod protocol;
 pub mod structs;
@@ -30,6 +31,6 @@ fn main() {
     let my_future =
         protocol::core::into_protocol(private, peerid, backend_sender, backend_reciever);
     thread::spawn(move || block_on(my_future).expect("Thread Spawn Error"));
-    loop {}
+    game::initialize::start_game();
     //Clean up
 }
