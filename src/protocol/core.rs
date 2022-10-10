@@ -152,7 +152,7 @@ pub async fn into_protocol(
                             }
 
                         }
-                        //discover new, add and query their block helper
+                        //discover new peers, add and query their block helper
                         SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Received {peer_id, info: IdentifyInfo {listen_addrs,..}})) => {
                             println!("{:?}", peer_id);
                             for addr in listen_addrs {
