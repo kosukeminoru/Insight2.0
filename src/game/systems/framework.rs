@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 
-use super::super::animation::{animation_helper, play};
-use super::super::ggrs_rollback::network;
+use super::super::animation::play;
 use super::super::players::info;
 
 pub trait Power {

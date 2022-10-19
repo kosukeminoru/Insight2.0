@@ -3,23 +3,25 @@ use bevy::render::mesh::Indices;
 use bevy::render::mesh::VertexAttributeValues;
 use bevy_rapier3d::prelude::*;
 
-use crate::players::info;
+use super::super::players::info;
 
 // Don't add as startup system because meshes are not done loading by that stage.
 pub fn hitbox(mut commands: Commands, query: Query<Entity, With<info::Player>>) {
     // log entity components to check if already has a collider of correct dimensions, else update.
     for entity in query.iter() {
-        commands.entity(entity)
-            .insert(LockedAxes::ROTATION_LOCKED) 
+        commands
+            .entity(entity)
+            .insert(LockedAxes::ROTATION_LOCKED)
             .insert(RigidBody::Dynamic)
             .with_children(|children| {
-                children.spawn()
+                children
+                    .spawn()
                     .insert(Collider::cuboid(0.5, 0.75, 0.5))
                     // Position the collider relative to the rigid-body.
                     .insert_bundle(TransformBundle::from(Transform::from_xyz(0.0, 0.0, -1.0)));
             })
             // Standard player size; update collider size if player is scaled.
-            //.insert(Collider::cuboid(0.0, 1.5, 0.25)) 
+            //.insert(Collider::cuboid(0.0, 1.5, 0.25))
             //.insert(Collider::cuboid(0.5, 0.75, 0.5))
             .insert(ColliderDebugColor(Color::hsl(220.0, 1.0, 0.3)));
     }
@@ -28,7 +30,8 @@ pub fn hitbox(mut commands: Commands, query: Query<Entity, With<info::Player>>) 
 // Don't add as startup system because meshes are not done loading by that stage.
 pub fn object_colliders(mut commands: Commands, query: Query<Entity, Without<info::Player>>) {
     for entity in query.iter() {
-        commands.entity(entity)
+        commands
+            .entity(entity)
             .insert(RigidBody::Dynamic)
             .insert(Collider::cuboid(0.5, 1.75, 0.25))
             .insert(ColliderDebugColor(Color::hsl(220.0, 1.0, 0.3)));

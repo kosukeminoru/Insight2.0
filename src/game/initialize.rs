@@ -1,14 +1,12 @@
 use bevy::prelude::*;
 use bevy_ggrs::{GGRSPlugin, SessionType};
 //use bevy_inspector_egui::WorldInspectorPlugin;
-use bevy_mod_picking::*;
 use bevy_rapier3d::prelude::*;
 
-use animation::{animation_helper, play};
-use default_world::create_default;
-use ggrs_rollback::{ggrs_camera, network};
-use players::{info, movement, physics};
-use worlds::{create_insight, player};
+use super::animation::{animation_helper, play};
+use super::default_world::create_default;
+use super::ggrs_rollback::network;
+use super::players::movement;
 
 const FPS: usize = 60;
 const ROLLBACK_DEFAULT: &str = "rollback_default";

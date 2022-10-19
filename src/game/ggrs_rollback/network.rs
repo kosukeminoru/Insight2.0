@@ -1,10 +1,8 @@
-use bevy::pbr::PbrBundle;
-use bevy::pbr::PointLightBundle;
 use bevy::pbr::StandardMaterial;
 use bevy::prelude::*;
 use bevy::render::color::Color;
-use bevy::render::mesh::shape;
 use bevy::render::mesh::Mesh;
+use bevy_ggrs::{Rollback, RollbackIdProvider};
 use bevy_rapier3d::prelude::*;
 use ggrs::{
     Config, P2PSession, PlayerType, SessionBuilder, SpectatorSession, SyncTestSession,
@@ -14,9 +12,9 @@ use std::collections::HashSet;
 use std::env;
 use std::net::SocketAddr;
 
-use crate::animation::animation_helper;
-use crate::players::{info, movement};
-use crate::worlds::world_manager;
+use super::super::animation::animation_helper;
+use super::super::players::{info, movement};
+use super::super::worlds::world_manager;
 
 const CUBE_SIZE: f32 = 0.2;
 const BLUE: Color = Color::rgb(0.8, 0.6, 0.2);
@@ -35,6 +33,10 @@ pub fn setup_system(
     synctest_session: Option<Res<SyncTestSession<GGRSConfig>>>,
     spectator_session: Option<Res<SpectatorSession<GGRSConfig>>>,
 ) {
+    commands.spawn_bundle(Camera3dBundle {
+        transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        ..default()
+    });
     //start creating p2p session
     let num_players = p2p_session
         .map(|s| s.num_players())
@@ -61,7 +63,7 @@ pub fn setup_system(
             // Create player.
             .spawn_bundle(SceneBundle {
                 transform: Transform {
-                    translation: Vec3::new(handle as f32, 0.0, -5.0),
+                    translation: Vec3::new(handle as f32, 0.0, -1.0),
                     ..default()
                 },
                 scene: player_handle.clone(),
@@ -83,7 +85,7 @@ pub fn setup_system(
                 abilities: Vec::new(),
             })
             .insert(info::Information::default())
-            .insert_bundle(PickableBundle::default()) // Player can be clicked.
+            // Player can be clicked.
             // Indicates bevy_GGRS that this entity should be saved and loaded.
             .insert(Rollback::new(rip.next_id()))
             // Physics
@@ -92,7 +94,7 @@ pub fn setup_system(
             .with_children(|children| {
                 children
                     .spawn()
-                    .insert(Collider::cuboid(0.5, 1.0, 0.5))
+                    .insert(Collider::cuboid(1.5, 1.0, 0.5))
                     // Position the collider relative to the rigid-body.
                     .insert_bundle(TransformBundle::from(Transform::from_xyz(0.0, 1.0, 0.0)));
             })

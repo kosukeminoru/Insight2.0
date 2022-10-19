@@ -1,19 +1,17 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use crate::animation::play;
-
 // Add stationary gltfs.
 pub fn create_default_plane(
-    mut commands: Commands, 
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-){
+) {
     // plane
     commands
         .spawn_bundle(PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Plane { size: 15.0 })), //PLANE_SIZE
+            mesh: meshes.add(Mesh::from(shape::Plane { size: 50.0 })), //PLANE_SIZE
             material: materials.add(Color::rgb(0.5, 0.5, 0.5).into()),
             ..Default::default()
         })

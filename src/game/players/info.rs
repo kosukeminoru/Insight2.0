@@ -1,10 +1,10 @@
 #![allow(dead_code)]
 
 use bevy::prelude::*;
-use std::hash::Hash;
 use std::collections::HashSet;
+use std::hash::Hash;
 
-use crate::worlds::world_manager;
+use super::super::worlds::world_manager;
 
 #[derive(Default, Component, Debug)]
 pub struct Player {
@@ -44,7 +44,7 @@ pub struct PlayerState {
 
 impl Default for PlayerState {
     fn default() -> Self {
-        PlayerState { 
+        PlayerState {
             state: PlayerStateEnum::IDLE,
             animation: None,
         }
@@ -59,24 +59,22 @@ pub struct MovementTarget {
 impl Default for MovementTarget {
     fn default() -> Self {
         return Self {
-           // current_target: Some(Vec3::ZERO),
-           current_target: None,
+            // current_target: Some(Vec3::ZERO),
+            current_target: None,
         };
     }
 }
 
 // Components that should be saved/loaded need to implement the `Reflect` trait
 #[derive(Component, Default, Debug)]
-pub struct MovementSpeed{
+pub struct MovementSpeed {
     pub speed: f32,
 }
 
 #[derive(Default, Component)]
 pub struct Information {
-    pub id: String, 
+    pub id: String,
     pub bounties: u32,
-    pub money: f64, 
-    pub health: f64, 
+    pub money: f64,
+    pub health: f64,
 }
-
-

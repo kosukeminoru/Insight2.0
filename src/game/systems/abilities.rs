@@ -1,9 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
-use std::time::Duration;
 
-use super::super::animation::{animation_helper, play};
-use super::super::ggrs_rollback::network;
+use super::super::animation::play;
 use super::super::players::info;
 use super::super::systems::framework;
 
@@ -12,7 +10,7 @@ use super::super::systems::framework;
 // implementations of movement. Multiple players can use this ability, just change handle.
 
 // User animation: flip; Controlled animation: dance
-pub struct Dance_Control_Ability {
+pub struct DanceControlAbility {
     //id: u64, // Ability identifier.
     // pub handle: u32, // Handle of player using this ability.
     // effect: framework::Effect,
@@ -23,7 +21,7 @@ pub struct Dance_Control_Ability {
 }
 
 // Implemented by power creator.
-impl framework::Power for Dance_Control_Ability {
+impl framework::Power for DanceControlAbility {
     fn my_movement(
         &self,
         mut p: &mut info::Player,
@@ -39,9 +37,7 @@ impl framework::Power for Dance_Control_Ability {
         // Player describes their own animation when using the power.
 
         // Animate me
-        player
-            .cross_fade(animations.0[2].clone_weak(), Duration::from_secs_f32(0.25))
-            .set_speed(1.3);
+        player.set_speed(1.3);
         p.state.animation = Some(0); //power once then go to idle
 
         // Put ability into kademlia. Abilites stored in kademlia by nodeid.
@@ -63,9 +59,7 @@ impl framework::Power for Dance_Control_Ability {
         // Specifies how a player reacts to this ability being used on them.
         // Program how affected players should be animated.
 
-        player
-            .cross_fade(animations.0[3].clone_weak(), Duration::from_secs_f32(0.25))
-            .set_speed(1.3);
+        player.set_speed(1.3);
         p.state.animation = Some(0); //power effect once, then go to idle
         p.state.state = info::PlayerStateEnum::IDLE;
     }
@@ -74,7 +68,7 @@ impl framework::Power for Dance_Control_Ability {
 //--------------------------------------------------------------------------------------------------------------------
 
 // User animation: punch; Controlled animation: Translated to the right.
-pub struct Punch_Ability {
+pub struct PunchAbility {
     //id: u64, // Ability identifier.
     // pub handle: u32, // Handle of player using this ability.
     // effect: framework::Effect,
@@ -85,7 +79,7 @@ pub struct Punch_Ability {
 }
 
 // Implemented by power creator.
-impl framework::Power for Punch_Ability {
+impl framework::Power for PunchAbility {
     fn my_movement(
         &self,
         mut p: &mut info::Player,
@@ -101,9 +95,7 @@ impl framework::Power for Punch_Ability {
         // Player describes their own animation when using the power.
 
         // Animate me
-        player
-            .cross_fade(animations.0[4].clone_weak(), Duration::from_secs_f32(0.25))
-            .set_speed(1.3);
+        player.set_speed(1.3);
         p.state.animation = Some(0); //power once then go to idle
 
         // Put ability into kademlia. Abilites stored in kademlia by nodeid.
@@ -128,9 +120,7 @@ impl framework::Power for Punch_Ability {
         transform.translation.x += 1.0;
         println!("translated");
 
-        player
-            .cross_fade(animations.0[5].clone_weak(), Duration::from_secs_f32(0.25))
-            .set_speed(1.3);
+        player.set_speed(1.3);
         p.state.animation = Some(0); //power effect once, then go to idle
         p.state.state = info::PlayerStateEnum::IDLE;
     }
@@ -139,7 +129,7 @@ impl framework::Power for Punch_Ability {
 //--------------------------------------------------------------------------------------------------------------------
 
 // User animation: jump attack; Controlled animation: Health decreased by 10.
-pub struct Damage_Ability {
+pub struct DamageAbility {
     //id: u64, // Ability identifier.
     // pub handle: u32, // Handle of player using this ability.
     // effect: framework::Effect,
@@ -150,7 +140,7 @@ pub struct Damage_Ability {
 }
 
 // Implemented by power creator.
-impl framework::Power for Damage_Ability {
+impl framework::Power for DamageAbility {
     fn my_movement(
         &self,
         mut p: &mut info::Player,
@@ -166,9 +156,7 @@ impl framework::Power for Damage_Ability {
         // Player describes their own animation when using the power.
 
         // Animate me
-        player
-            .cross_fade(animations.0[6].clone_weak(), Duration::from_secs_f32(0.25))
-            .set_speed(1.3);
+        player.set_speed(1.3);
         p.state.animation = Some(0); //power once then go to idle
 
         // Put ability into kademlia. Abilites stored in kademlia by nodeid.
@@ -195,9 +183,7 @@ impl framework::Power for Damage_Ability {
             println!("health: {}", p.health);
         }
 
-        player
-            .cross_fade(animations.0[7].clone_weak(), Duration::from_secs_f32(0.25))
-            .set_speed(1.3);
+        player.set_speed(1.3);
         p.state.animation = Some(0); //power effect once, then go to idle
         p.state.state = info::PlayerStateEnum::IDLE;
     }
@@ -208,7 +194,7 @@ impl framework::Power for Damage_Ability {
 // User animation: two hands cast spelling; Controlled animation: cubes spawned.
 // TODO: Weapons and spawned objects can have their own powers. Ex. if the player touches the cubes,
 // they lose health.
-pub struct Spawn_Cube_Ability {
+pub struct SpawnCubeAbility {
     //id: u64, // Ability identifier.
     // pub handle: u32, // Handle of player using this ability.
     // effect: framework::Effect,
@@ -220,7 +206,7 @@ pub struct Spawn_Cube_Ability {
 
 // Implemented by power creator.
 // (TODO: what if I wanted the same spawned objects to impact different players differently?)
-impl framework::Power for Spawn_Cube_Ability {
+impl framework::Power for SpawnCubeAbility {
     fn my_movement(
         &self,
         mut p: &mut info::Player,
@@ -236,9 +222,7 @@ impl framework::Power for Spawn_Cube_Ability {
         // Player describes their own animation when using the power.
 
         // Animate me
-        player
-            .cross_fade(animations.0[8].clone_weak(), Duration::from_secs_f32(0.25))
-            .set_speed(1.3);
+        player.set_speed(1.3);
         p.state.animation = Some(0); //power once then go to idle
 
         // Spawn gltf bird.

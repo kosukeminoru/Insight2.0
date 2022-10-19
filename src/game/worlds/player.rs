@@ -1,26 +1,18 @@
 use bevy::prelude::*;
 
-use crate::worlds::world_manager;
-use crate::players::info;
-use crate::ggrs_rollback::network;
+use super::super::ggrs_rollback::network;
+use super::super::players::info;
+use super::super::worlds::world_manager;
 
 #[derive(Debug)]
 pub struct PlayerWorldInfo {
-    pub transform: Transform, 
-    pub plane: world_manager::IPlane, 
+    pub transform: Transform,
+    pub plane: world_manager::IPlane,
 }
 
 // Player World Loc = transform (can also determine plane level and index by rounding down)
 // No error yet if player walking on nonexistent plane.
-pub fn get_world_loc(
-    mut query: Query<
-        (
-            &mut Transform,
-            &mut info::Player,
-            &network::Me,
-        )
-    >,
-) {
+pub fn get_world_loc(mut query: Query<(&mut Transform, &mut info::Player, &network::Me)>) {
     let (transform, mut player, _) = query.single_mut();
     let pos = transform.translation;
     let x = round_down(pos.x);
@@ -29,7 +21,7 @@ pub fn get_world_loc(
     let plane = world_manager::IPlane::new(x, y, z);
     let info = PlayerWorldInfo {
         transform: transform.clone(),
-        plane
+        plane,
     };
     player.plane = plane;
     println!("player info: {:?}", info.plane);

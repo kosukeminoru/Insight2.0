@@ -1,16 +1,14 @@
 #![allow(dead_code)]
 
-use crate::animation::{animation_helper, play};
-use crate::ggrs_rollback::network;
-use crate::players::info;
-use crate::systems::{abilities, framework};
-use crate::FrameCount;
+use super::super::animation::{animation_helper, play};
+use super::super::players::info;
+use super::super::systems::abilities;
+use crate::game::initialize::FrameCount;
+use crate::game::systems::framework::Power;
 use bevy::math::f32::Vec3;
 use bevy::prelude::*;
 use bytemuck::{Pod, Zeroable};
-use framework::Power;
 use ggrs::{InputStatus, PlayerHandle};
-use std::time::Duration;
 
 const INPUT_UP: u8 = 1 << 0;
 const INPUT_DOWN: u8 = 1 << 1;
@@ -25,7 +23,7 @@ pub struct BoxInput {
 }
 
 // Handles one movement.
-pub fn input(handle: In<PlayerHandle>, keyboard_input: Res<Input<KeyCode>>) -> BoxInput {
+pub fn input(_handle: In<PlayerHandle>, keyboard_input: Res<Input<KeyCode>>) -> BoxInput {
     let mut input: u8 = 0;
 
     if keyboard_input.pressed(KeyCode::W) {
@@ -63,7 +61,7 @@ pub fn animate_moving_player(
     )>,
     mut animations_resource: ResMut<Assets<AnimationClip>>,
 ) {
-    for (e, children, mut t, mut p, helper) in query.iter_mut() {
+    for (_e, _children, mut t, mut p, helper) in query.iter_mut() {
         //check that the shooter's parent entity's helper entity has the same id as the animation_player entity
         for (player_ent, mut player) in &mut ani_players {
             //AnimationPlayer
@@ -82,13 +80,7 @@ pub fn animate_moving_player(
                     // How my player moves when moving. (TODO: This can be customized.)
                     info::PlayerStateEnum::MOVING => {
                         if p.state.animation.is_none() || p.state.animation.unwrap() != 1 {
-                            player
-                                .cross_fade(
-                                    animations.0[1].clone_weak(),
-                                    Duration::from_secs_f32(0.25),
-                                )
-                                .set_speed(1.3)
-                                .repeat();
+                            player.set_speed(1.3).repeat();
                             p.state.animation = Some(1);
                         }
                     }
@@ -99,7 +91,7 @@ pub fn animate_moving_player(
                     info::PlayerStateEnum::POWER => {
                         if p.state.animation.is_none() || p.state.animation.unwrap() != 2 {
                             // Change my player's movement according to p.ability_id
-                            let girl_ability = abilities::Dance_Control_Ability {};
+                            let girl_ability = abilities::DanceControlAbility {};
                             girl_ability.my_movement(
                                 &mut p,
                                 &mut player,
@@ -120,7 +112,7 @@ pub fn animate_moving_player(
                         // A player cannot change how they're affected as a power, but they can create a power to counter.
                         // TODO: Do you need (handle arg) to know whose ability is affecting you?
 
-                        let girl_effect = abilities::Dance_Control_Ability {};
+                        let girl_effect = abilities::DanceControlAbility {};
                         girl_effect.effect(
                             &mut p,
                             &mut player,
